@@ -8,29 +8,19 @@ Ext.define('CustomApp', {
     extend: 'Rally.app.App',
     componentCls: 'app',
     _artifacts:[],
+
     launch: function() {
         var today = new Date().toISOString();
-        var that = this;
+        var me = this;
+        // var selectedReleaseRef = me.down('#release-combobox').getRecord().get('_ref');
+        // var storeFilters = me._getFilters(selectedReleaseRef);
+
+        //TODO: Change to Artifact store to handle defects as well
         var artifacts = Ext.create('Rally.data.wsapi.Store', {
             model: 'UserStory',
             fetch: ['ObjectID', 'FormattedID','Name','RevisionHistory','Revisions','Description','User'],
             autoLoad: true,
-            filters: [
-                // {
-                //     property: 'Iteration.StartDate',
-                //     operator: '<=',
-                //     value: today
-                // },
-                // {
-                //     property: 'Iteration.EndDate',
-                //     operator: '>=',
-                //     value: today
-                // }
-                // {
-                //     property: 'Release',
-                //     value: '/release/278229164760' //TODO: hange to use filter
-                // }                
-            ]
+            // filters: storeFilters
         });
         artifacts.load().then({
             success: this._getRevHistoryModel,
@@ -46,7 +36,8 @@ Ext.define('CustomApp', {
             scope: this
         }).then({
             success:function(results) {
-                that._makeGrid(results);
+                me._addReleaseCombo();
+                me._makeGrid(results);
             },
             failure: function(){
                 console.log("oh noes!");
@@ -81,24 +72,55 @@ Ext.define('CustomApp', {
         return Deft.Promise.all(promises);
     },
     _stitchDataTogether: function (revhistories) {
-        var that = this;
+        var me = this;
         var artifactsWithRevs = [];
-        _.each(that._artifacts, function (artifact) {
+        _.each(me._artifacts, function (artifact) {
             artifactsWithRevs.push({ artifact: artifact.data });
         });
         var i = 0;
         _.each(revhistories, function (revisions) {
             console.log('Revs: ', revisions);
-
+            _.each(revisions, function (revision) {
+                //logic for getting blocked stories here
+                if (revision.data.Description.includes(BLOCKED_START) || revision.data.Description.includes(BLOCKED_END)) {
+                    console.log('Revision ' + revision.data.RevisionNumber + ' blocked:' + revision);
+                }
+            });
             artifactsWithRevs[i].revisions = revisions;
             i++;
         });
         return artifactsWithRevs;
 
     },
+    _addReleaseCombo: function () {
+        console.log('Adding Release combo box');
+        var me = this;
+        me.add(
+            {
+                xtype: 'rallyreleasecombobox',
+                itemId: 'release-combobox',
+                fieldLabel: 'Release',
+                labelAlign: 'right',
+                //  listeners: {
+                //      ready: me._makeGrid,
+                //      scope: me
+                //  }
+            }
+        );
+        
+    },
+    _getFilters: function (releaseValue) {
+
+        var releaseFilter = Ext.create('Rally.data.wsapi.Filter', {
+            property: 'Release',
+            value: releaseValue
+        });
+        // return iterationFilter.and(severityFilter);
+        return releaseFilter;
+    },
 
     _makeGrid: function(artifactsWithRevs){
-      console.log('Aritfacts with Revs: ', artifactsWithRevs);
+      console.log('Artifacts with Revs: ', artifactsWithRevs);
 
         this.add({
             xtype: 'rallygrid',
@@ -112,57 +134,44 @@ Ext.define('CustomApp', {
                 {
                     text: 'FormattedID', dataIndex: 'artifact', 
                       renderer:function(value){
-                        console.log('Value: ', value);
                         return '<a href="https://rally1.rallydev.com/#/detail/userstory/' + value.ObjectID + '" target="_blank">' + value.FormattedID + '</a>';
                     }
                 },
                 {
-                    text: 'Revision # and description', dataIndex: 'revisions', flex: 1,
-                    renderer: function (value) {
-                        var html = [];
-                        _.each(value, function (rev) {
-
-                            // html.push(rev.data.RevisionNumber + " " + rev.data.Description);
-                            console.log('Looking for blocked');
-                            if (rev.data.Description.includes(BLOCKED_START)) {
-                                console.log('Found blocked');
-                                // html.push(rev.data.RevisionNumber + " " + rev.data.Description);
-                                startBlocked = Date.parse(rev.data.CreationDate);
-                                // html.push('Blocked at rev:', rev.data.RevisionNumber);
-                                html.push('Blocked at', rev.data.CreationDate);
-                            }
-                            else if (rev.data.Description.includes(BLOCKED_END)) {
-                                console.log('Found unblocked');
-                                endBlocked = Date.parse(rev.data.CreationDate);
-                                // html.push('Unblocked at rev:', rev.data.RevisionNumber);
-                                html.push('Unblocked at', rev.data.CreationDate);
-                            }
-
-                        });
-                        return html.join('</br></br>');
+                    text: 'Name', dataIndex: 'artifact', 
+                      renderer:function(value){
+                        return value.Name;
                     }
                 },
                 {
-                    text: 'Time blocked',dataIndex: 'revisions', flex:1,
-                    renderer:function(){
-                        var timeBlocked = _msToTime(endBlocked - startBlocked);
-                        console.log('Time blocked: ', timeBlocked);
-                        return 'Blocked for ' + timeBlocked;
+                    text: 'Hours blocked', dataIndex: 'revisions', flex: 1,
+                    renderer: function (value) {
+                        var totalHoursBlocked = 0;
+
+                        _.each(value, function (rev) {
+                            if (rev.data.Description.includes(BLOCKED_START)) {
+                                // console.log('Found blocked')
+                                startBlocked = rev.data.CreationDate;
+                                totalHoursBlocked += _getHoursBlocked();
+
+                            }
+                            else if (rev.data.Description.includes(BLOCKED_END)) {
+                                // console.log('Found unblocked');
+                                endBlocked = rev.data.CreationDate;
+                            }
+
+                        });
+                        return totalHoursBlocked;
                     }
-                }
+                },
             ]
         });
         
-    },
-    _msToTime: function (ms) {
-        let time = new Date(ms);
-        let hours = time.getUTCHours();
-        let minutes = time.getUTCMinutes();
-        let seconds = time.getUTCSeconds();
-        let milliseconds = time.getUTCMilliseconds();
-        return hours + ":" + minutes + ":" + seconds + ":" + milliseconds;
     }
     
-    
 });
+
+function _getHoursBlocked() {
+    return Rally.util.DateTime.getDifference(endBlocked, startBlocked, 'hour');
+}
 
