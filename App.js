@@ -10,17 +10,14 @@ Ext.define('CustomApp', {
     _artifacts:[],
 
     launch: function() {
-        var today = new Date().toISOString();
         var me = this;
         // var selectedReleaseRef = me.down('#release-combobox').getRecord().get('_ref');
         // var storeFilters = me._getFilters(selectedReleaseRef);
 
-        //TODO: Change to Artifact store to handle defects as well
         var artifacts = Ext.create('Rally.data.wsapi.Store', {
             model: 'UserStory',
-            fetch: ['ObjectID', 'FormattedID','Name','RevisionHistory','Revisions','Description','User'],
+            fetch: ['ObjectID', 'FormattedID','Name','RevisionHistory','Revisions','Description','Project'],
             autoLoad: true,
-            // filters: storeFilters
         });
         artifacts.load().then({
             success: this._getRevHistoryModel,
@@ -74,7 +71,6 @@ Ext.define('CustomApp', {
         return Deft.Promise.all(promises);
     },
     _stitchDataTogether: function (revhistories) {
-        // console.log('Stories with rev histories: ', revhistories);
         var me = this;
         var promises = [];
         _.each(me._artifacts, function (artifact) {
@@ -82,16 +78,8 @@ Ext.define('CustomApp', {
         });
 
         var i = 0;
+        //Add revisions arrays to artifacts
         _.each(revhistories, function (revisions) {      
-            // _.each(revisions, function (revision) {
-            //     //logic for getting blocked stories here
-            //     // console.log('Revision: ', revision);
-            //     if (revision.data.Description.includes(BLOCKED_START)) {
-            //         console.log('Artifact: ' + promises[i].artifact.FormattedID + ' Revision ' + revision.data.RevisionNumber + ' blocked:' + revision.data.CreationDate);
-            //         promises[i].revisions = revisions;
-            //         i++;
-            //     }
-            // });
             promises[i].revisions = revisions;
             i++;
         });
@@ -107,29 +95,23 @@ Ext.define('CustomApp', {
             var artifactRevisions = artifactWithRev.revisions;
             if (artifactRevisions != undefined) {
                 _.each(artifactRevisions, function (revision) {
-                    //Get total time blocked for ALL revisions
                     var revisionDescription = revision.data.Description;
 
                     if (revisionDescription.includes(BLOCKED_START)) {
-                        // var blockedFor = me._getTotalHoursBlocked(artifactWithRev);
-                        // blockedTime += blockedFor;
                         blockedTime = me._getTotalHoursBlocked(artifactWithRev);
 
                     }
-                    
+
                 });
                 if (blockedTime > 0) {
                     console.log('Blocked artifact: ', artifactFormattedId);
-                        console.log('Blocked for: ', blockedTime);
-                        artifactWithRev.blockedHours = blockedTime;
-                        blockedArtifacts.push(artifactWithRev);
+                    console.log('Blocked for: ', blockedTime);
+                    artifactWithRev.blockedHours = blockedTime;
+                    blockedArtifacts.push(artifactWithRev);
                 }
-                // console.log('Blocked artifact: ', artifactFormattedId);
-                //         console.log('Blocked for: ', blockedTime);
-                //         artifactWithRev.blockedHours = blockedTime;
-                //         blockedArtifacts.push(artifactWithRev);
-            }      
-            
+                // blockedArtifacts.push(artifactWithRev);
+            }
+
         });
         return blockedArtifacts;
     },
@@ -142,59 +124,43 @@ Ext.define('CustomApp', {
                 itemId: 'release-combobox',
                 fieldLabel: 'Release',
                 labelAlign: 'right',
-                //  listeners: {
-                //      ready: me._makeGrid,
-                //      scope: me
-                //  }
+                // listeners: {
+                //     ready: me._makeGrid(),
+                //     scope: me
+                // }
             }
         );
         
     },
     _getFilters: function (releaseValue) {
-
         var releaseFilter = Ext.create('Rally.data.wsapi.Filter', {
             property: 'Release',
             value: releaseValue
         });
-        // return iterationFilter.and(severityFilter);
         return releaseFilter;
     },
     _getHoursBlocked: function (start, end) {
         const milliseconds = Math.abs(new Date(end) - new Date(start));
         const hours = milliseconds / 36e5;
         return hours;
-
-        // return Rally.util.DateTime.getDifference(end, start, 'hour');
     },
     _getTotalHoursBlocked: function (revisions) {
-        // console.log('_getTotalHoursBlocked for ', revisions.artifact.FormattedID);
+        // Get all the hours blocked for all revisions of that artifact
         var me = this;
         var revs = revisions.revisions;
         var totalHoursBlocked = 0;
         var endBlocked = 0;
         var startBlocked = 0;
         revs.forEach(rev => {
-            // if (rev.data.Description.includes(BLOCKED_START)) {
-            //     startBlocked = rev.data.CreationDate;
-            //     totalHoursBlocked += me._getHoursBlocked(startBlocked, endBlocked);
-            //     console.log('totalHoursBlocked ', totalHoursBlocked);
-            // }
-            // else if (rev.data.Description.includes(BLOCKED_END)) {
-            //     endBlocked = rev.data.CreationDate;
-            // }
-            // console.log('Inner total hours blocked ' + totalHoursBlocked.toFixed(0));
-            // return totalHoursBlocked.toFixed(0);
             var revHoursBlocked = parseInt(me._getRevHoursBlocked(rev));
             totalHoursBlocked += revHoursBlocked;
         });
-        // console.log('Total hours blocked all revisions: ', totalHoursBlocked);
         return totalHoursBlocked;
     },
+
     _getRevHoursBlocked: function (rev) {
-        // console.log('_getRevHoursBlocked for ', rev.data.RevisionNumber);
+        //Get hours blocked for a particular revision
         var me = this;
-        // var startBlocked = 0;
-        // var endBlocked = 0;
         var revHoursBlocked = 0;
         if (rev.data.Description.includes(BLOCKED_START)) {
             startBlocked = rev.data.CreationDate;
@@ -203,46 +169,60 @@ Ext.define('CustomApp', {
         else if (rev.data.Description.includes(BLOCKED_END)) {
             endBlocked = rev.data.CreationDate;
         }
-        // if (revHoursBlocked >0) {
-        //     console.log('Rev ' + rev.data.RevisionNumber + ': hours blocked ' + revHoursBlocked.toFixed(0));
-        // }
-        return revHoursBlocked.toFixed(0);
-        
+        return revHoursBlocked.toFixed(0);       
     },
-    _makeGrid: function(artifactsWithRevs){
-    //   console.log('Artifacts with Revs: ', artifactsWithRevs);
-      var me = this;
 
+    _getDaysFromHours: function (hours) {
+        return Math.round(hours/24 * 100) / 100;
+    }, 
+     
+    _makeGrid: function (artifactsWithRevs) {
+        //   console.log('Artifacts with Revs: ', artifactsWithRevs);
+        
+        var me = this;
         this.add({
             xtype: 'rallygrid',
             showPagingToolbar: true,
             showRowActionsColumn: false,
             editable: false,
             store: Ext.create('Rally.data.custom.Store', {
-                data: artifactsWithRevs
+                data: artifactsWithRevs,
             }),
             columnCfgs: [
                 {
-                    text: 'FormattedID', dataIndex: 'artifact', 
-                      renderer:function(value){
+                    text: 'ID', dataIndex: 'artifact', width: 100,
+                    renderer: function (value) {
                         return '<a href="https://rally1.rallydev.com/#/detail/userstory/' + value.ObjectID + '" target="_blank">' + value.FormattedID + '</a>';
                     }
                 },
                 {
-                    text: 'Name', dataIndex: 'artifact', 
-                      renderer:function(artifact){
+                    text: 'Name', dataIndex: 'artifact', minWidth: 500,
+                    renderer: function (artifact) {
                         return artifact.Name;
                     }
                 },
                 {
-                    text: 'Hours blocked', dataIndex: 'blockedHours',
+                    text: 'Team', dataIndex: 'artifact', minWidth: 200,
                     renderer: function (artifact) {
-                        return artifact;
+                        return artifact.Project.Name;
+                    }
+                },
+                // {
+                //     text: 'Tags', dataIndex: 'artifact',
+                //     renderer: function (artifact) {
+                //         return artifact.Tags;
+                //     }
+                // },
+                {
+                    text: 'Time blocked', dataIndex: 'blockedHours', minWidth: 200,
+                    renderer: function (blockedHours) {
+                        var blockedDays = me._getDaysFromHours(blockedHours);
+                        return blockedHours + ' hours (' + blockedDays + ' days)';
                     }
                 },
             ]
         });
-        
+
     }
     
 });
