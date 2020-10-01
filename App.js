@@ -7,7 +7,7 @@ var endBlocked;
 Ext.define('CustomApp', {
     extend: 'Rally.app.App',
     componentCls: 'app',
-    _artifactsStore: [],
+    _artifacts: [],
     items: [
         {
             // This container controls the layout of the pulldowns
@@ -27,12 +27,12 @@ Ext.define('CustomApp', {
     launch: function () {
         var me = this;
 
-        var artifactsStore = Ext.create('Rally.data.wsapi.Store', {
+        var storyStore = Ext.create('Rally.data.wsapi.Store', {
             model: 'UserStory',
             fetch: ['ObjectID', 'FormattedID', 'Name', 'RevisionHistory', 'Revisions', 'Description', 'Project'],
             autoLoad: true,
         });
-        artifactsStore.load().then({
+        storyStore.load().then({
             success: this._getRevHistoryModel,
             scope: this
         }).then({
@@ -59,8 +59,8 @@ Ext.define('CustomApp', {
         });
     },
 
-    _getRevHistoryModel: function (artifactsStore) {
-        this._artifactsStore = artifactsStore;
+    _getRevHistoryModel: function (storyStore) {
+        this._storyStore = storyStore;
         return Rally.data.ModelFactory.getModel({
             type: 'RevisionHistory'
         });
@@ -69,7 +69,7 @@ Ext.define('CustomApp', {
     _onRevHistoryModelCreated: function (model) {
         // console.log('Revision history model: ', model);
         var promises = [];
-        _.each(this._artifactsStore, function (artifact) {
+        _.each(this._storyStore, function (artifact) {
             var ref = artifact.get('RevisionHistory')._ref;
             //   console.log(artifact.get('FormattedID'), ref);
             promises.push(model.load(Rally.util.Ref.getOidFromRef(ref)));
@@ -91,12 +91,12 @@ Ext.define('CustomApp', {
     _stitchDataTogether: function (revhistories) {
         var me = this;
         var promises = [];
-        _.each(me._artifactsStore, function (artifact) {
+        _.each(me._storyStore, function (artifact) {
             promises.push({ artifact: artifact.data });
         });
 
         var i = 0;
-        //Add revisions arrays to artifactsStore
+        //Add revisions arrays to storyStore
         _.each(revhistories, function (revisions) {
             promises[i].revisions = revisions;
             i++;
@@ -104,11 +104,11 @@ Ext.define('CustomApp', {
         return Deft.Promise.all(promises);
     },
 
-    _getBlockedItems: function (artifactsStoreWithRevs) {
+    _getBlockedItems: function (storyStoreWithRevs) {
         var me = this;
         var i = 0;
         var blockedArtifacts = [];
-        _.each(artifactsStoreWithRevs, function (artifactWithRev) {
+        _.each(storyStoreWithRevs, function (artifactWithRev) {
             var blockedTime = 0;
             var artifactFormattedId = artifactWithRev.artifact.FormattedID;
             var artifactRevisions = artifactWithRev.revisions;
@@ -231,10 +231,10 @@ Ext.define('CustomApp', {
 
     /**
      * Creates a store using the blocked artifacts and time blocked data
-     * @param {*} artifactsStoreWithRevs blocked artifacts and time blocked data
+     * @param {*} storyStoreWithRevs blocked artifacts and time blocked data
      * @return {*} Filtered store
      */
-    _loadData: function (artifactsStoreWithRevs) {
+    _loadData: function (storyStoreWithRevs) {
         // var me = this;
         // if (me.blockedArtifactsStore) {
         //     console.log('store exists');
@@ -244,7 +244,7 @@ Ext.define('CustomApp', {
         // }
         // else {
         //     me.blockedArtifactsStore = Ext.create('Rally.data.custom.Store', {
-        //         data: artifactsStoreWithRevs,
+        //         data: storyStoreWithRevs,
         //         // filters: [
         //         //     storeFilters
         //         // ],
@@ -258,7 +258,7 @@ Ext.define('CustomApp', {
         // }
 
         return Ext.create('Rally.data.custom.Store', {
-            data: artifactsStoreWithRevs,
+            data: storyStoreWithRevs,
             // filters: [
             //     storeFilters
             // ],
@@ -267,11 +267,11 @@ Ext.define('CustomApp', {
 
     /**
      * Makes a grid using the blocked artifact store
-     * @param {*} artifactsStoreWithRevs 
+     * @param {*} storyStoreWithRevs 
      */
-    _makeGrid: function (artifactsStoreWithRevs) {
+    _makeGrid: function (storyStoreWithRevs) {
         var me = this;
-        me.dataStore = me._loadData(artifactsStoreWithRevs);
+        me.dataStore = me._loadData(storyStoreWithRevs);
         var releaseCombo = me.down('#release-combobox');
         // var selectedReleaseRef = releaseCombo.getRecord().get('_ref');
         var selectedReleaseRef = releaseCombo.lastValue; //TODO: #1 Change to use value
