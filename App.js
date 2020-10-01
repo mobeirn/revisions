@@ -7,19 +7,32 @@ var endBlocked;
 Ext.define('CustomApp', {
     extend: 'Rally.app.App',
     componentCls: 'app',
-    _artifacts:[],
+    _artifactsStore: [],
+    items: [
+        {
+            // This container controls the layout of the pulldowns
+            xtype: 'container',
+            itemId: "pulldown-container",
+            layout: {
+                type: 'hbox',
+                align: 'stretch'
+            },
+            style: {
+                padding: '10px',
+                border: '1px solid'
+            }
+        }
+    ],
 
-    launch: function() {
+    launch: function () {
         var me = this;
-        // var selectedReleaseRef = me.down('#release-combobox').getRecord().get('_ref');
-        // var storeFilters = me._getFilters(selectedReleaseRef);
 
-        var artifacts = Ext.create('Rally.data.wsapi.Store', {
+        var artifactsStore = Ext.create('Rally.data.wsapi.Store', {
             model: 'UserStory',
-            fetch: ['ObjectID', 'FormattedID','Name','RevisionHistory','Revisions','Description','Project'],
+            fetch: ['ObjectID', 'FormattedID', 'Name', 'RevisionHistory', 'Revisions', 'Description', 'Project'],
             autoLoad: true,
         });
-        artifacts.load().then({
+        artifactsStore.load().then({
             success: this._getRevHistoryModel,
             scope: this
         }).then({
@@ -35,31 +48,35 @@ Ext.define('CustomApp', {
             success: this._getBlockedItems,
             scope: this
         }).then({
-            success:function(results) {
+            success: function (results) {
+                me._addProjectPicker();
                 me._addReleaseCombo();
                 me._makeGrid(results);
             },
-            failure: function(){
+            failure: function () {
                 console.log("oh noes!");
             }
         });
     },
-    _getRevHistoryModel:function(artifacts){
-        this._artifacts = artifacts;
+
+    _getRevHistoryModel: function (artifactsStore) {
+        this._artifactsStore = artifactsStore;
         return Rally.data.ModelFactory.getModel({
             type: 'RevisionHistory'
         });
     },
-  _onRevHistoryModelCreated: function(model) {
-    // console.log('Revision history model: ', model);
-    var promises = [];
-    _.each(this._artifacts, function(artifact){
-      var ref = artifact.get('RevisionHistory')._ref;
-    //   console.log(artifact.get('FormattedID'), ref);
-        promises.push(model.load(Rally.util.Ref.getOidFromRef(ref)));
-    }); 
-    return Deft.Promise.all(promises);  
-   },
+
+    _onRevHistoryModelCreated: function (model) {
+        // console.log('Revision history model: ', model);
+        var promises = [];
+        _.each(this._artifactsStore, function (artifact) {
+            var ref = artifact.get('RevisionHistory')._ref;
+            //   console.log(artifact.get('FormattedID'), ref);
+            promises.push(model.load(Rally.util.Ref.getOidFromRef(ref)));
+        });
+        return Deft.Promise.all(promises);
+    },
+
     _onModelLoaded: function (histories) {
         // console.log('Revision histories: ', histories);
         var promises = [];
@@ -70,26 +87,28 @@ Ext.define('CustomApp', {
         });
         return Deft.Promise.all(promises);
     },
+
     _stitchDataTogether: function (revhistories) {
         var me = this;
         var promises = [];
-        _.each(me._artifacts, function (artifact) {
+        _.each(me._artifactsStore, function (artifact) {
             promises.push({ artifact: artifact.data });
         });
 
         var i = 0;
-        //Add revisions arrays to artifacts
-        _.each(revhistories, function (revisions) {      
+        //Add revisions arrays to artifactsStore
+        _.each(revhistories, function (revisions) {
             promises[i].revisions = revisions;
             i++;
         });
         return Deft.Promise.all(promises);
     },
-    _getBlockedItems: function (artifactsWithRevs) {
+
+    _getBlockedItems: function (artifactsStoreWithRevs) {
         var me = this;
         var i = 0;
         var blockedArtifacts = [];
-        _.each(artifactsWithRevs, function (artifactWithRev) {
+        _.each(artifactsStoreWithRevs, function (artifactWithRev) {
             var blockedTime = 0;
             var artifactFormattedId = artifactWithRev.artifact.FormattedID;
             var artifactRevisions = artifactWithRev.revisions;
@@ -115,10 +134,34 @@ Ext.define('CustomApp', {
         });
         return blockedArtifacts;
     },
+
+    /**
+     * Adds the Project picker
+     */
+    _addProjectPicker: function () {
+        console.log('Adding Project Picker');
+        var me = this;
+        var projectPicker = (
+            {
+                xtype: 'rallyprojectpicker',
+                itemId: 'project-picker',
+                fieldLabel: 'Project',
+                labelAlign: 'right',
+                // listeners: {
+                //     ready: me._addReleaseCombo(),
+                //     scope: me
+                // }
+            }
+        );
+        me.down('#pulldown-container').add(projectPicker);
+    },
+    /**
+     * Adds the release Combo dropdown
+     */
     _addReleaseCombo: function () {
         console.log('Adding Release combo box');
         var me = this;
-        me.add(
+        var releaseComboBox = (
             {
                 xtype: 'rallyreleasecombobox',
                 itemId: 'release-combobox',
@@ -128,10 +171,12 @@ Ext.define('CustomApp', {
                 //     ready: me._makeGrid(),
                 //     scope: me
                 // }
+                value: 'PI 23'
             }
         );
-        
+        me.down('#pulldown-container').add(releaseComboBox);
     },
+
     _getFilters: function (releaseValue) {
         var releaseFilter = Ext.create('Rally.data.wsapi.Filter', {
             property: 'Release',
@@ -139,13 +184,18 @@ Ext.define('CustomApp', {
         });
         return releaseFilter;
     },
+
     _getHoursBlocked: function (start, end) {
         const milliseconds = Math.abs(new Date(end) - new Date(start));
         const hours = milliseconds / 36e5;
         return hours;
     },
+
+    /**
+     * Get all the hours blocked for all revisions of that artifact
+     * @param {*} revisions The Revision history of the artifact
+     */
     _getTotalHoursBlocked: function (revisions) {
-        // Get all the hours blocked for all revisions of that artifact
         var me = this;
         var revs = revisions.revisions;
         var totalHoursBlocked = 0;
@@ -158,8 +208,11 @@ Ext.define('CustomApp', {
         return totalHoursBlocked;
     },
 
+    /**
+     * Get hours blocked for a particular revision
+     * @param {*} rev the revision
+     */
     _getRevHoursBlocked: function (rev) {
-        //Get hours blocked for a particular revision
         var me = this;
         var revHoursBlocked = 0;
         if (rev.data.Description.includes(BLOCKED_START)) {
@@ -169,25 +222,74 @@ Ext.define('CustomApp', {
         else if (rev.data.Description.includes(BLOCKED_END)) {
             endBlocked = rev.data.CreationDate;
         }
-        return revHoursBlocked.toFixed(0);       
+        return revHoursBlocked.toFixed(0);
     },
 
     _getDaysFromHours: function (hours) {
-        return Math.round(hours/24 * 100) / 100;
-    }, 
-     
-    _makeGrid: function (artifactsWithRevs) {
-        //   console.log('Artifacts with Revs: ', artifactsWithRevs);
-        
+        return Math.round(hours / 24 * 100) / 100;
+    },
+
+    /**
+     * Creates a store using the blocked artifacts and time blocked data
+     * @param {*} artifactsStoreWithRevs blocked artifacts and time blocked data
+     * @return {*} Filtered store
+     */
+    _loadData: function (artifactsStoreWithRevs) {
+        // var me = this;
+        // if (me.blockedArtifactsStore) {
+        //     console.log('store exists');
+        //     console.log('Blocked Artifact store: ', me.blockedArtifactsStore)
+        //     // me.defectStore.setFilter(storeFilters);
+        //     me.blockedArtifactsStore.load();
+        // }
+        // else {
+        //     me.blockedArtifactsStore = Ext.create('Rally.data.custom.Store', {
+        //         data: artifactsStoreWithRevs,
+        //         // filters: [
+        //         //     storeFilters
+        //         // ],
+        //         autoLoad: true,
+        //         listeners: {
+        //             load: function (myStore, myData, success) {
+
+        //             }
+        //         }
+        //     });
+        // }
+
+        return Ext.create('Rally.data.custom.Store', {
+            data: artifactsStoreWithRevs,
+            // filters: [
+            //     storeFilters
+            // ],
+        });
+    },
+
+    /**
+     * Makes a grid using the blocked artifact store
+     * @param {*} artifactsStoreWithRevs 
+     */
+    _makeGrid: function (artifactsStoreWithRevs) {
         var me = this;
-        this.add({
+        me.dataStore = me._loadData(artifactsStoreWithRevs);
+        var releaseCombo = me.down('#release-combobox');
+        // var selectedReleaseRef = releaseCombo.getRecord().get('_ref');
+        var selectedReleaseRef = releaseCombo.lastValue; //TODO: #1 Change to use value
+
+        // var storeFilters = me._getFilters(selectedReleaseRef); 
+        // me.dataStore.filter(storeFilters);
+
+        me.dataStore.load();
+
+        me.add({
             xtype: 'rallygrid',
             showPagingToolbar: true,
             showRowActionsColumn: false,
             editable: false,
-            store: Ext.create('Rally.data.custom.Store', {
-                data: artifactsWithRevs,
-            }),
+            style: {
+                width: ' 100%'
+            },
+            store: me.dataStore,
             columnCfgs: [
                 {
                     text: 'ID', dataIndex: 'artifact', width: 100,
@@ -196,7 +298,7 @@ Ext.define('CustomApp', {
                     }
                 },
                 {
-                    text: 'Name', dataIndex: 'artifact', minWidth: 500,
+                    text: 'Name', dataIndex: 'artifact', flex: 1,
                     renderer: function (artifact) {
                         return artifact.Name;
                     }
@@ -224,6 +326,6 @@ Ext.define('CustomApp', {
         });
 
     }
-    
+
 });
 
