@@ -26,10 +26,22 @@ Ext.define('CustomApp', {
 
     launch: function () {
         var me = this;
-
+        var myContext = me.getContext();
         var storyStore = Ext.create('Rally.data.wsapi.Store', {
             model: 'UserStory',
-            fetch: ['ObjectID', 'FormattedID', 'Name', 'RevisionHistory', 'Revisions', 'Description', 'Project'],
+            // context: {
+            //     //SelfSolve
+            //     // project: '/project/140184204748d',
+
+            //     // Edge of Tomorrow
+            //     project: '/project/140511004472d',
+                
+            //     projectScopeUp: false,
+            //     // projectScopeDown: false
+            // },
+            // context: myContext,
+            // fetch: ['ObjectID', 'FormattedID', 'Name', 'RevisionHistory', 'Revisions', 'Description', 'Release', 'Project'],
+            fetch: true,
             autoLoad: true,
         });
         storyStore.load().then({
@@ -49,8 +61,8 @@ Ext.define('CustomApp', {
             scope: this
         }).then({
             success: function (results) {
-                me._addProjectPicker();
                 me._addReleaseCombo();
+                me._addProjectPicker();
                 me._makeGrid(results);
             },
             failure: function () {
@@ -61,6 +73,14 @@ Ext.define('CustomApp', {
 
     _getRevHistoryModel: function (storyStore) {
         this._storyStore = storyStore;
+        // _.each(this._storyStore, function (artifact) {
+        //     if(artifact.data.Release) {
+        //     var relName = artifact.data.Release._refObjectName;
+        //     console.log('Release: ', relName);
+        //     }
+            
+        // });
+
         return Rally.data.ModelFactory.getModel({
             type: 'RevisionHistory'
         });
@@ -161,6 +181,8 @@ Ext.define('CustomApp', {
     _addReleaseCombo: function () {
         console.log('Adding Release combo box');
         var me = this;
+
+        var context = me.getContext;
         var releaseComboBox = (
             {
                 xtype: 'rallyreleasecombobox',
@@ -168,9 +190,9 @@ Ext.define('CustomApp', {
                 fieldLabel: 'Release',
                 labelAlign: 'right',
                 // listeners: {
-                //     ready: me._makeGrid(),
+                //     ready: me._addProjectPicker(),
                 //     scope: me
-                // }
+                // },
                 value: 'PI 23'
             }
         );
@@ -235,28 +257,6 @@ Ext.define('CustomApp', {
      * @return {*} Filtered store
      */
     _loadData: function (storyStoreWithRevs) {
-        // var me = this;
-        // if (me.blockedArtifactsStore) {
-        //     console.log('store exists');
-        //     console.log('Blocked Artifact store: ', me.blockedArtifactsStore)
-        //     // me.defectStore.setFilter(storeFilters);
-        //     me.blockedArtifactsStore.load();
-        // }
-        // else {
-        //     me.blockedArtifactsStore = Ext.create('Rally.data.custom.Store', {
-        //         data: storyStoreWithRevs,
-        //         // filters: [
-        //         //     storeFilters
-        //         // ],
-        //         autoLoad: true,
-        //         listeners: {
-        //             load: function (myStore, myData, success) {
-
-        //             }
-        //         }
-        //     });
-        // }
-
         return Ext.create('Rally.data.custom.Store', {
             data: storyStoreWithRevs,
             // filters: [
@@ -279,7 +279,7 @@ Ext.define('CustomApp', {
         // var storeFilters = me._getFilters(selectedReleaseRef); 
         // me.dataStore.filter(storeFilters);
 
-        me.dataStore.load();
+        // me.dataStore.load();
 
         me.add({
             xtype: 'rallygrid',
@@ -301,6 +301,16 @@ Ext.define('CustomApp', {
                     text: 'Name', dataIndex: 'artifact', flex: 1,
                     renderer: function (artifact) {
                         return artifact.Name;
+                    }
+                },
+                {
+                    text: 'Release', dataIndex: 'artifact', minWidth: 200,
+                    renderer: function (artifact) {
+                        if (artifact.Release) {
+                            return artifact.Release.Name;
+                        } else {
+                            return '';
+                        }
                     }
                 },
                 {

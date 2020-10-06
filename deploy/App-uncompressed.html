@@ -3,35 +3,56 @@
 <head>
     <title>Revisions by User</title>
 
-    <script type="text/javascript" src="/apps/2.0rc3/sdk.js"></script>
+    <script type="text/javascript" src="/apps/2.0/sdk.js"></script>
 
     <script type="text/javascript">
         Rally.onReady(function () {
-                Ext.define('CustomApp', {
+                const BLOCKED_START = 'BLOCKED changed from [false] to [true]';
+const BLOCKED_END = 'BLOCKED changed from [true] to [false]';
+
+var startBlocked;
+var endBlocked;
+
+Ext.define('CustomApp', {
     extend: 'Rally.app.App',
     componentCls: 'app',
-    _artifacts:[],
-    launch: function() {
-        var today = new Date().toISOString();
-        var that = this;
-        var artifacts = Ext.create('Rally.data.wsapi.Store', {
+    _artifacts: [],
+    items: [
+        {
+            // This container controls the layout of the pulldowns
+            xtype: 'container',
+            itemId: "pulldown-container",
+            layout: {
+                type: 'hbox',
+                align: 'stretch'
+            },
+            style: {
+                padding: '10px',
+                border: '1px solid'
+            }
+        }
+    ],
+
+    launch: function () {
+        var me = this;
+        var myContext = me.getContext();
+        var storyStore = Ext.create('Rally.data.wsapi.Store', {
             model: 'UserStory',
-            fetch: ['ObjectID', 'FormattedID','Name','RevisionHistory','Revisions','Description','User'],
+            // context: {
+            //     //SelfSolve
+            //     // project: '/project/140184204748d',
+
+            //     // Edge of Tomorrow
+            //     project: '/project/140511004472d',
+                
+            //     projectScopeUp: false,
+            //     // projectScopeDown: false
+            // },
+            // context: myContext,
+            fetch: ['ObjectID', 'FormattedID', 'Name', 'RevisionHistory', 'Revisions', 'Description', 'Release', 'Project'],
             autoLoad: true,
-            filters: [
-                {
-                    property: 'Iteration.StartDate',
-                    operator: '<=',
-                    value: today
-                },
-                {
-                    property: 'Iteration.EndDate',
-                    operator: '>=',
-                    value: today
-                }
-            ]
         });
-        artifacts.load().then({
+        storyStore.load().then({
             success: this._getRevHistoryModel,
             scope: this
         }).then({
@@ -44,115 +65,299 @@
             success: this._stitchDataTogether,
             scope: this
         }).then({
-            success:function(results) {
-                that._makeGrid(results);
+            success: this._getBlockedItems,
+            scope: this
+        }).then({
+            success: function (results) {
+                me._addReleaseCombo();
+                me._addProjectPicker();
+                me._makeGrid(results);
             },
-            failure: function(){
+            failure: function () {
                 console.log("oh noes!");
             }
         });
     },
-    _getRevHistoryModel:function(artifacts){
-        this._artifacts = artifacts;
+
+    _getRevHistoryModel: function (storyStore) {
+        this._storyStore = storyStore;
+        _.each(this._storyStore, function (artifact) {
+            if(artifact.data.Release) {
+            var relName = artifact.data.Release._refObjectName;
+            console.log('Release: ', relName);
+            }
+            
+        });
+
         return Rally.data.ModelFactory.getModel({
             type: 'RevisionHistory'
         });
     },
-  _onRevHistoryModelCreated: function(model) {
-    var that = this;
-    var promises = [];
-    _.each(this._artifacts, function(artifact){
-      var ref = artifact.get('RevisionHistory')._ref;
-      console.log(artifact.get('FormattedID'), ref);
-        promises.push(model.load(Rally.util.Ref.getOidFromRef(ref)));
-    }); 
-    return Deft.Promise.all(promises);  
-   },
-    
-    _onModelLoaded: function(histories) {
-      var promises = [];
-      _.each(histories, function(history){
-        var revisions = history.get('Revisions');
-        revisions.store = history.getCollection('Revisions',{fetch:['User','Description','CreationDate', 'RevisionNumber']});
-        promises.push(revisions.store.load());
-      });
-      return Deft.Promise.all(promises);  
-    },
-    _stitchDataTogether:function(revhistories){
-      var that = this;
-      var artifactsWithRevs = [];
-      _.each(that._artifacts, function(artifact){
-        artifactsWithRevs.push({artifact: artifact.data});
-      });
-      var i = 0;
-      _.each(revhistories, function(revisions){
-        artifactsWithRevs[i].revisions = revisions;
-        i++;
-      });
-      return artifactsWithRevs;
 
+    _onRevHistoryModelCreated: function (model) {
+        // console.log('Revision history model: ', model);
+        var promises = [];
+        _.each(this._storyStore, function (artifact) {
+            var ref = artifact.get('RevisionHistory')._ref;
+            //   console.log(artifact.get('FormattedID'), ref);
+            promises.push(model.load(Rally.util.Ref.getOidFromRef(ref)));
+        });
+        return Deft.Promise.all(promises);
     },
 
-    _makeGrid: function(artifactsWithRevs){
-      console.log(artifactsWithRevs);
+    _onModelLoaded: function (histories) {
+        // console.log('Revision histories: ', histories);
+        var promises = [];
+        _.each(histories, function (history) {
+            var revisions = history.get('Revisions');
+            revisions.store = history.getCollection('Revisions', { fetch: ['User', 'Description', 'CreationDate', 'RevisionNumber'] });
+            promises.push(revisions.store.load());
+        });
+        return Deft.Promise.all(promises);
+    },
 
-        this.add({
+    _stitchDataTogether: function (revhistories) {
+        var me = this;
+        var promises = [];
+        _.each(me._storyStore, function (artifact) {
+            promises.push({ artifact: artifact.data });
+        });
+
+        var i = 0;
+        //Add revisions arrays to storyStore
+        _.each(revhistories, function (revisions) {
+            promises[i].revisions = revisions;
+            i++;
+        });
+        return Deft.Promise.all(promises);
+    },
+
+    _getBlockedItems: function (storyStoreWithRevs) {
+        var me = this;
+        var i = 0;
+        var blockedArtifacts = [];
+        _.each(storyStoreWithRevs, function (artifactWithRev) {
+            var blockedTime = 0;
+            var artifactFormattedId = artifactWithRev.artifact.FormattedID;
+            var artifactRevisions = artifactWithRev.revisions;
+            if (artifactRevisions != undefined) {
+                _.each(artifactRevisions, function (revision) {
+                    var revisionDescription = revision.data.Description;
+
+                    if (revisionDescription.includes(BLOCKED_START)) {
+                        blockedTime = me._getTotalHoursBlocked(artifactWithRev);
+
+                    }
+
+                });
+                if (blockedTime > 0) {
+                    console.log('Blocked artifact: ', artifactFormattedId);
+                    console.log('Blocked for: ', blockedTime);
+                    artifactWithRev.blockedHours = blockedTime;
+                    blockedArtifacts.push(artifactWithRev);
+                }
+                // blockedArtifacts.push(artifactWithRev);
+            }
+
+        });
+        return blockedArtifacts;
+    },
+
+    /**
+     * Adds the Project picker
+     */
+    _addProjectPicker: function () {
+        console.log('Adding Project Picker');
+        var me = this;
+        var projectPicker = (
+            {
+                xtype: 'rallyprojectpicker',
+                itemId: 'project-picker',
+                fieldLabel: 'Project',
+                labelAlign: 'right',
+                // listeners: {
+                //     ready: me._addReleaseCombo(),
+                //     scope: me
+                // }
+            }
+        );
+        me.down('#pulldown-container').add(projectPicker);
+    },
+    /**
+     * Adds the release Combo dropdown
+     */
+    _addReleaseCombo: function () {
+        console.log('Adding Release combo box');
+        var me = this;
+
+        var context = me.getContext;
+        var releaseComboBox = (
+            {
+                xtype: 'rallyreleasecombobox',
+                itemId: 'release-combobox',
+                fieldLabel: 'Release',
+                labelAlign: 'right',
+                // listeners: {
+                //     ready: me._addProjectPicker(),
+                //     scope: me
+                // },
+                value: 'PI 23'
+            }
+        );
+        me.down('#pulldown-container').add(releaseComboBox);
+    },
+
+    _getFilters: function (releaseValue) {
+        var releaseFilter = Ext.create('Rally.data.wsapi.Filter', {
+            property: 'Release',
+            value: releaseValue
+        });
+        return releaseFilter;
+    },
+
+    _getHoursBlocked: function (start, end) {
+        const milliseconds = Math.abs(new Date(end) - new Date(start));
+        const hours = milliseconds / 36e5;
+        return hours;
+    },
+
+    /**
+     * Get all the hours blocked for all revisions of that artifact
+     * @param {*} revisions The Revision history of the artifact
+     */
+    _getTotalHoursBlocked: function (revisions) {
+        var me = this;
+        var revs = revisions.revisions;
+        var totalHoursBlocked = 0;
+        var endBlocked = 0;
+        var startBlocked = 0;
+        revs.forEach(rev => {
+            var revHoursBlocked = parseInt(me._getRevHoursBlocked(rev));
+            totalHoursBlocked += revHoursBlocked;
+        });
+        return totalHoursBlocked;
+    },
+
+    /**
+     * Get hours blocked for a particular revision
+     * @param {*} rev the revision
+     */
+    _getRevHoursBlocked: function (rev) {
+        var me = this;
+        var revHoursBlocked = 0;
+        if (rev.data.Description.includes(BLOCKED_START)) {
+            startBlocked = rev.data.CreationDate;
+            revHoursBlocked += me._getHoursBlocked(startBlocked, endBlocked);
+        }
+        else if (rev.data.Description.includes(BLOCKED_END)) {
+            endBlocked = rev.data.CreationDate;
+        }
+        return revHoursBlocked.toFixed(0);
+    },
+
+    _getDaysFromHours: function (hours) {
+        return Math.round(hours / 24 * 100) / 100;
+    },
+
+    /**
+     * Creates a store using the blocked artifacts and time blocked data
+     * @param {*} storyStoreWithRevs blocked artifacts and time blocked data
+     * @return {*} Filtered store
+     */
+    _loadData: function (storyStoreWithRevs) {
+        return Ext.create('Rally.data.custom.Store', {
+            data: storyStoreWithRevs,
+            // filters: [
+            //     storeFilters
+            // ],
+        });
+    },
+
+    /**
+     * Makes a grid using the blocked artifact store
+     * @param {*} storyStoreWithRevs 
+     */
+    _makeGrid: function (storyStoreWithRevs) {
+        var me = this;
+        me.dataStore = me._loadData(storyStoreWithRevs);
+        var releaseCombo = me.down('#release-combobox');
+        // var selectedReleaseRef = releaseCombo.getRecord().get('_ref');
+        var selectedReleaseRef = releaseCombo.lastValue; //TODO: #1 Change to use value
+
+        // var storeFilters = me._getFilters(selectedReleaseRef); 
+        // me.dataStore.filter(storeFilters);
+
+        // me.dataStore.load();
+
+        me.add({
             xtype: 'rallygrid',
             showPagingToolbar: true,
             showRowActionsColumn: false,
             editable: false,
-            store: Ext.create('Rally.data.custom.Store', {
-                data: artifactsWithRevs
-            }),
+            style: {
+                width: ' 100%'
+            },
+            store: me.dataStore,
             columnCfgs: [
                 {
-                    text: 'FormattedID', dataIndex: 'artifact', 
-                      renderer:function(value){
+                    text: 'ID', dataIndex: 'artifact', width: 100,
+                    renderer: function (value) {
                         return '<a href="https://rally1.rallydev.com/#/detail/userstory/' + value.ObjectID + '" target="_blank">' + value.FormattedID + '</a>';
                     }
                 },
                 {
-                    text: 'Name',dataIndex: 'artifact',
-                    renderer:function(value){
-                        return value.Name;
+                    text: 'Name', dataIndex: 'artifact', flex: 1,
+                    renderer: function (artifact) {
+                        return artifact.Name;
                     }
                 },
                 {
-                    text: 'Revision author',dataIndex: 'revisions',
-                    renderer:function(value){
-                        var html = [];
-                        _.each(value, function(rev){
-                            html.push(rev.data.User._refObjectName);
-                        });
-                        return html.join('</br></br>');
+                    text: 'Release', dataIndex: 'artifact', minWidth: 200,
+                    renderer: function (artifact) {
+                        if (artifact.Release) {
+                            return artifact.Release.Name;
+                        } else {
+                            return '';
+                        }
                     }
                 },
                 {
-                    text: 'Revision # and description',dataIndex: 'revisions', flex:1,
-                    renderer:function(value){
-                        var html = [];
-                        _.each(value, function(rev){
-                            html.push(rev.data.RevisionNumber + " " + rev.data.Description);
-                        });
-                        return html.join('</br></br>');
+                    text: 'Team', dataIndex: 'artifact', minWidth: 200,
+                    renderer: function (artifact) {
+                        return artifact.Project.Name;
                     }
-                }
+                },
+                // {
+                //     text: 'Tags', dataIndex: 'artifact',
+                //     renderer: function (artifact) {
+                //         return artifact.Tags;
+                //     }
+                // },
+                {
+                    text: 'Time blocked', dataIndex: 'blockedHours', minWidth: 200,
+                    renderer: function (blockedHours) {
+                        var blockedDays = me._getDaysFromHours(blockedHours);
+                        return blockedHours + ' hours (' + blockedDays + ' days)';
+                    }
+                },
             ]
         });
-        
+
     }
-    
+
 });
 
 
 
             Rally.launchApp('CustomApp', {
                 name:"Revisions by User",
-	            parentRepos:""
+                parentRepos:"",
+                version:"0.1.1"
             });
 
         });
     </script>
+
 
 
     <style type="text/css">
