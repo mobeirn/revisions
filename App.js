@@ -26,23 +26,11 @@ Ext.define('CustomApp', {
 
     launch: function () {
         var me = this;
-        var myContext = me.getContext();
         var storyStore = Ext.create('Rally.data.wsapi.Store', {
             model: 'UserStory',
-            // context: {
-            //     //SelfSolve
-            //     // project: '/project/140184204748d',
-
-            //     // Edge of Tomorrow
-            //     project: '/project/140511004472d',
-                
-            //     projectScopeUp: false,
-            //     // projectScopeDown: false
-            // },
-            // context: myContext,
-            // fetch: ['ObjectID', 'FormattedID', 'Name', 'RevisionHistory', 'Revisions', 'Description', 'Release', 'Project'],
             fetch: true,
             autoLoad: true,
+            limit: Infinity//Gets all pages. Default is 1
         });
         storyStore.load().then({
             success: this._getRevHistoryModel,
@@ -190,10 +178,10 @@ Ext.define('CustomApp', {
                 fieldLabel: 'Release',
                 labelAlign: 'right',
                 // listeners: {
-                //     ready: me._addProjectPicker(),
+                //     select: me._makeGrid,
                 //     scope: me
                 // },
-                value: 'PI 23'
+                value: '/release/278229164760'
             }
         );
         me.down('#pulldown-container').add(releaseComboBox);
@@ -286,6 +274,7 @@ Ext.define('CustomApp', {
             showPagingToolbar: true,
             showRowActionsColumn: false,
             editable: false,
+            sortableColumns : true,
             style: {
                 width: ' 100%'
             },
@@ -307,7 +296,7 @@ Ext.define('CustomApp', {
                     text: 'Release', dataIndex: 'artifact', minWidth: 200,
                     renderer: function (artifact) {
                         if (artifact.Release) {
-                            return artifact.Release.Name;
+                            return artifact.Release._refObjectName;
                         } else {
                             return '';
                         }
@@ -316,7 +305,7 @@ Ext.define('CustomApp', {
                 {
                     text: 'Team', dataIndex: 'artifact', minWidth: 200,
                     renderer: function (artifact) {
-                        return artifact.Project.Name;
+                        return artifact.Project._refObjectName;
                     }
                 },
                 // {
