@@ -25,14 +25,20 @@ Ext.define('CustomApp', {
     ],
 
     launch: function () {
+        console.log('Starting...');
         var me = this;
+        console.log('Creating store...');
+        var startTime = Date.now();
         var storyStore = Ext.create('Rally.data.wsapi.Store', {
             model: 'UserStory',
             fetch: true,
             autoLoad: true,
             limit: Infinity//Gets all pages. Default is 1
         });
+        me._logTimeTaken(startTime);
+
         storyStore.load().then({
+            // me._loadStore(storyStore).then({
             success: this._getRevHistoryModel,
             scope: this
         }).then({
@@ -59,6 +65,16 @@ Ext.define('CustomApp', {
         });
     },
 
+    _loadStore: function (store) {
+        var me = this;
+        console.log('Loading store...');
+        var startTime = Date.now();
+        var loadedStore = store.load();
+        me._logTimeTaken(startTime);
+        return loadedStore;
+
+    },
+
     _getRevHistoryModel: function (storyStore) {
         this._storyStore = storyStore;
         // _.each(this._storyStore, function (artifact) {
@@ -75,29 +91,37 @@ Ext.define('CustomApp', {
     },
 
     _onRevHistoryModelCreated: function (model) {
-        // console.log('Revision history model: ', model);
+        console.log('Revision history model created.');
+        var me = this;
+        var startTime = Date.now();
         var promises = [];
         _.each(this._storyStore, function (artifact) {
             var ref = artifact.get('RevisionHistory')._ref;
             //   console.log(artifact.get('FormattedID'), ref);
             promises.push(model.load(Rally.util.Ref.getOidFromRef(ref)));
         });
+        me._logTimeTaken(startTime);
         return Deft.Promise.all(promises);
     },
 
     _onModelLoaded: function (histories) {
-        // console.log('Revision histories: ', histories);
+        console.log('Getting Revision histories...');
+        var me = this;
         var promises = [];
+        var startTime = Date.now();
         _.each(histories, function (history) {
             var revisions = history.get('Revisions');
             revisions.store = history.getCollection('Revisions', { fetch: ['User', 'Description', 'CreationDate', 'RevisionNumber'] });
             promises.push(revisions.store.load());
         });
+        me._logTimeTaken(startTime);
         return Deft.Promise.all(promises);
     },
 
     _stitchDataTogether: function (revhistories) {
+        console.log('Putting data together...');
         var me = this;
+        var startTime = Date.now();
         var promises = [];
         _.each(me._storyStore, function (artifact) {
             promises.push({ artifact: artifact.data });
@@ -109,10 +133,13 @@ Ext.define('CustomApp', {
             promises[i].revisions = revisions;
             i++;
         });
+        me._logTimeTaken(startTime);
         return Deft.Promise.all(promises);
     },
 
     _getBlockedItems: function (storyStoreWithRevs) {
+        console.log('Getting blocked items...');
+        var startTime = Date.now();
         var me = this;
         var i = 0;
         var blockedArtifacts = [];
@@ -135,11 +162,11 @@ Ext.define('CustomApp', {
                     console.log('Blocked for: ', blockedTime);
                     artifactWithRev.blockedHours = blockedTime;
                     blockedArtifacts.push(artifactWithRev);
-                }
-                // blockedArtifacts.push(artifactWithRev);
             }
+        }
 
         });
+        me._logTimeTaken(startTime);
         return blockedArtifacts;
     },
 
@@ -159,14 +186,19 @@ Ext.define('CustomApp', {
                 //     ready: me._addReleaseCombo(),
                 //     scope: me
                 // }
+
+                //Set initial project if required
+                // value: '/project/140511004472'//Edge of Tomorrow
             }
         );
         me.down('#pulldown-container').add(projectPicker);
     },
+
     /**
      * Adds the release Combo dropdown
      */
     _addReleaseCombo: function () {
+        //TODO: #2 get listeners to work
         console.log('Adding Release combo box');
         var me = this;
 
@@ -178,10 +210,12 @@ Ext.define('CustomApp', {
                 fieldLabel: 'Release',
                 labelAlign: 'right',
                 // listeners: {
-                //     select: me._makeGrid,
+                //     select: me._loadData,
                 //     scope: me
                 // },
-                value: '/release/278229164760'
+
+                //Set initial value if required
+                // value: '/release/278229164760'//PI 23
             }
         );
         me.down('#pulldown-container').add(releaseComboBox);
@@ -205,7 +239,8 @@ Ext.define('CustomApp', {
      * Get all the hours blocked for all revisions of that artifact
      * @param {*} revisions The Revision history of the artifact
      */
-    _getTotalHoursBlocked: function (revisions) {
+    _getTotalHoursBlocked: function (revisions) {       
+        console.log('Getting total hours blocked...');
         var me = this;
         var revs = revisions.revisions;
         var totalHoursBlocked = 0;
@@ -245,12 +280,23 @@ Ext.define('CustomApp', {
      * @return {*} Filtered store
      */
     _loadData: function (storyStoreWithRevs) {
-        return Ext.create('Rally.data.custom.Store', {
+        console.log('Loading data...');
+        var me = this;
+        var startTime = Date.now();
+        var releaseCombo = me.down('#release-combobox');
+        var selectedReleaseRef = releaseCombo.lastValue; //TODO: #1 Change to use value
+        var storeFilters = me._getFilters(selectedReleaseRef); 
+
+        var store =  Ext.create('Rally.data.custom.Store', {
             data: storyStoreWithRevs,
             // filters: [
             //     storeFilters
             // ],
         });
+        store.load();
+        me._logTimeTaken(startTime);
+
+        return store;
     },
 
     /**
@@ -258,23 +304,16 @@ Ext.define('CustomApp', {
      * @param {*} storyStoreWithRevs 
      */
     _makeGrid: function (storyStoreWithRevs) {
-        var me = this;
+        
+        var me = this;       
         me.dataStore = me._loadData(storyStoreWithRevs);
-        var releaseCombo = me.down('#release-combobox');
-        // var selectedReleaseRef = releaseCombo.getRecord().get('_ref');
-        var selectedReleaseRef = releaseCombo.lastValue; //TODO: #1 Change to use value
-
-        // var storeFilters = me._getFilters(selectedReleaseRef); 
-        // me.dataStore.filter(storeFilters);
-
-        // me.dataStore.load();
-
+        
+        var startTime = Date.now();
+        console.log('Making grid...');
         me.add({
             xtype: 'rallygrid',
             showPagingToolbar: true,
             showRowActionsColumn: false,
-            editable: false,
-            sortableColumns : true,
             style: {
                 width: ' 100%'
             },
@@ -323,8 +362,11 @@ Ext.define('CustomApp', {
                 },
             ]
         });
+        me._logTimeTaken(startTime);
 
+    },
+    _logTimeTaken: function (startTime) {
+        var endTime = Date.now();
+        console.log('Time taken ' + (endTime - startTime) + 'ms');
     }
-
 });
-
