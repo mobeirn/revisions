@@ -37,6 +37,9 @@ Ext.define('CustomApp', {
         });
         me._logTimeTaken(startTime);
 
+        me._addReleaseCombo();
+        me._addProjectPicker();
+
         storyStore.load().then({
             // me._loadStore(storyStore).then({
             success: this._getRevHistoryModel,
@@ -55,8 +58,8 @@ Ext.define('CustomApp', {
             scope: this
         }).then({
             success: function (results) {
-                me._addReleaseCombo();
-                me._addProjectPicker();
+                // me._addReleaseCombo();
+                // me._addProjectPicker();
                 me._makeGrid(results);
             },
             failure: function () {
@@ -118,6 +121,10 @@ Ext.define('CustomApp', {
         return Deft.Promise.all(promises);
     },
 
+   /**
+    * Combines stories with their revisions
+    * @param {*} revhistories Revision history to get revisions from
+    */ 
     _stitchDataTogether: function (revhistories) {
         console.log('Putting data together...');
         var me = this;
@@ -196,6 +203,7 @@ Ext.define('CustomApp', {
 
     /**
      * Adds the release Combo dropdown
+     * Loads data once selected
      */
     _addReleaseCombo: function () {
         //TODO: #2 get listeners to work
@@ -209,10 +217,11 @@ Ext.define('CustomApp', {
                 itemId: 'release-combobox',
                 fieldLabel: 'Release',
                 labelAlign: 'right',
-                // listeners: {
-                //     select: me._loadData,
-                //     scope: me
-                // },
+                listeners: {
+                    // select: me._loadData,
+                    select: me._makeGrid,
+                    scope: me
+                },
 
                 //Set initial value if required
                 // value: '/release/278229164760'//PI 23
@@ -284,14 +293,14 @@ Ext.define('CustomApp', {
         var me = this;
         var startTime = Date.now();
         var releaseCombo = me.down('#release-combobox');
-        var selectedReleaseRef = releaseCombo.lastValue; //TODO: #1 Change to use value
+        var selectedReleaseRef = releaseCombo.getValue();
         var storeFilters = me._getFilters(selectedReleaseRef); 
 
         var store =  Ext.create('Rally.data.custom.Store', {
             data: storyStoreWithRevs,
-            // filters: [
-            //     storeFilters
-            // ],
+            filters: [
+                storeFilters
+            ],
         });
         store.load();
         me._logTimeTaken(startTime);
@@ -309,8 +318,13 @@ Ext.define('CustomApp', {
         me.dataStore = me._loadData(storyStoreWithRevs);
         
         var startTime = Date.now();
-        console.log('Making grid...');
-        me.add({
+
+        if (me.grid) {
+            console.log('Grid exists');
+            me.grid.store = me.dataStore;
+        } else {
+            console.log('Making grid...');
+        me.grid = me.add({
             xtype: 'rallygrid',
             showPagingToolbar: true,
             showRowActionsColumn: false,
@@ -362,6 +376,9 @@ Ext.define('CustomApp', {
                 },
             ]
         });
+        }
+       
+        console.log('Grid store: ', me.grid.store);
         me._logTimeTaken(startTime);
 
     },

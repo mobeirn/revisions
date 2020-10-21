@@ -1,0 +1,34 @@
+arg1:constructor {groupers: constructor, groups: constructor, filters: constructor, removed: Array(0), hasListeners: HasListeners, …}
+data:constructor {initialConfig: {…}, getKey: ƒ, maintainIndices: true, items: Array(0), map: {…}, …}
+events:{write: constructor, beforeload: constructor, load: constructor, idchanged: constructor, refresh: constructor, …}
+eventsSuspended:0
+filters:constructor {allowFunctions: false, initialConfig: {…}, items: Array(1), map: {…}, keys: Array(1), …}
+groupers:constructor {allowFunctions: false, getKey: ƒ, initialConfig: {…}, items: Array(0), map: {…}, …}
+groups:constructor {allowFunctions: false, getKey: ƒ, initialConfig: {…}, items: Array(0), map: {…}, …}
+hasListeners:HasListeners {write: 2, beforeload: 1, load: 2, idchanged: 2, refresh: 1, …}
+implicitModel:true
+lastOptions:{action: 'read', sorters: Array(0), page: 1, start: 0, limit: 25, …}
+loading:false
+model:ƒ constructor () {\n            \n            \n            return this.constructor.apply(this, arguments) || null;\n        }
+modelDefaults:null
+pageSize:25
+proxy:constructor {proxyConfig: {…}, type: 'custom', model: ƒ, hasListeners: HasListeners, events: {…}, …}
+removed:(0) []
+snapshot:constructor {initialConfig: {…}, getKey: ƒ, maintainIndices: true, items: Array(25), map: {…}, …}
+sorters:constructor {allowFunctions: false, getKey: ƒ, initialConfig: {…}, items: Array(0), map: {…}, …}
+allowFunctions:false
+events:{}
+eventsSuspended:0
+generation:1
+getKey:ƒ (item) {\n            return item.id || item.property;\n        }
+hasListeners:HasListeners
+indexGeneration:1
+indexMap:{}
+initialConfig:{allowFunctions: false, getKey: ƒ}
+items:(0) []
+keys:(0) []
+length:0
+map:{}
+__proto__:constructor
+totalCount:123
+__proto__:constructor

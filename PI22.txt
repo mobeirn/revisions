@@ -1,0 +1,47 @@
+arg1:constructor {groupers: constructor, groups: constructor, filters: constructor, removed: Array(0), hasListeners: HasListeners, …}
+pageSize:25
+proxy:constructor {proxyConfig: {…}, type: 'custom', model: ƒ, hasListeners: HasListeners, events: {…}, …}
+removed:(0) []
+snapshot:constructor {initialConfig: {…}, getKey: ƒ, maintainIndices: true, items: Array(25), map: {…}, …}
+sorters:constructor {allowFunctions: false, getKey: ƒ, initialConfig: {…}, items: Array(0), map: {…}, …}
+allowFunctions:false
+events:{}
+eventsSuspended:0
+generation:1
+getKey:ƒ (item) {\n            return item.id || item.property;\n        }
+hasListeners:HasListeners
+indexGeneration:1
+indexMap:{}
+initialConfig:{allowFunctions: false, getKey: ƒ}
+items:(0) []
+keys:(0) []
+length:0
+map:{}
+__proto__:constructor
+data:constructor {initialConfig: {…}, getKey: ƒ, maintainIndices: true, items: Array(0), map: {…}, …}
+events:{}
+__proto__:Object
+eventsSuspended:0
+filters:constructor {allowFunctions: false, initialConfig: {…}, items: Array(1), map: {…}, keys: Array(1), …}
+groupers:constructor {allowFunctions: false, getKey: ƒ, initialConfig: {…}, items: Array(0), map: {…}, …}
+groups:constructor {allowFunctions: false, getKey: ƒ, initialConfig: {…}, items: Array(0), map: {…}, …}
+hasListeners:HasListeners
+implicitModel:true
+lastOptions:{action: 'read', sorters: Array(0), page: 1, start: 0, limit: 25, …}
+action:'read'
+addRecords:false
+limit:25
+page:1
+sorters:(0) []
+start:0
+__proto__:Object
+loading:false
+model:ƒ constructor () {\n            \n            \n            return this.constructor.apply(this, arguments) || null;\n        }
+modelDefaults:null
+pageSize:25
+proxy:constructor {proxyConfig: {…}, type: 'custom', model: ƒ, hasListeners: HasListeners, events: {…}, …}
+removed:(0) []
+snapshot:constructor {initialConfig: {…}, getKey: ƒ, maintainIndices: true, items: Array(1), map: {…}, …}
+sorters:constructor {allowFunctions: false, getKey: ƒ, initialConfig: {…}, items: Array(0), map: {…}, …}
+totalCount:1
+__proto__:constructor
